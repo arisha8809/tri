@@ -1,117 +1,243 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
-void main() {
-  runApp(MyApp());
+class CartPage extends StatefulWidget {
+  @override
+  _CartPageState createState() => _CartPageState();
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class _CartPageState extends State<CartPage> {
+  List<Map<String, dynamic>> _cartItems = [];
+  double _totalPrice = 0.0;
+  String userName = '';
+  String userAddress = '';
+  String userPhone = '';
 
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Cart Page',
-      theme: ThemeData(
-        primarySwatch: Colors.green,
-      ),
-      home: CartPage(),
-    );
+  void initState() {
+    super.initState();
+    _fetchUserDetails();
+    _fetchCartItems();
   }
-}
 
-class CartPage extends StatelessWidget {
-  const CartPage({super.key});
+  Future<void> _fetchUserDetails() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final userSnapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+      if (userSnapshot.exists) {
+        setState(() {
+          userName = userSnapshot['name'] ?? '';
+          userAddress = userSnapshot['address'] ?? '';
+          userPhone = userSnapshot['phone_number'] ?? ''; // Existing phone_number field
+        });
+      }
+    }
+  }
+
+  Future<void> _fetchCartItems() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final cartSnapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('cart')
+          .get();
+
+      double totalPrice = 0.0;
+      final cartItems = cartSnapshot.docs.map((doc) {
+        final data = doc.data();
+        totalPrice += (data['totalPrice'] as num).toDouble(); // Type handling for price
+        return {
+          'id': doc.id,
+          'name': data['name'],
+          'price': (data['price'] as num).toDouble(),
+          'quantity': data['quantity'],
+          'totalPrice': (data['totalPrice'] as num).toDouble(),
+          'customization': data['customization'] ?? '', // Add customization field
+        };
+      }).toList();
+
+      setState(() {
+        _cartItems = cartItems;
+        _totalPrice = totalPrice;
+      });
+    }
+  }
+
+  Future<void> _updateQuantity(String itemId, int newQuantity, double price) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final cartRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('cart')
+          .doc(itemId);
+
+      if (newQuantity == 0) {
+        await cartRef.delete(); // Remove item if quantity is 0
+      } else {
+        await cartRef.update({
+          'quantity': newQuantity,
+          'totalPrice': newQuantity * price,
+        });
+      }
+
+      _fetchCartItems(); // Refetch cart items
+    }
+  }
+
+  Future<void> _placeOrder() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final cartRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('cart');
+      final orderRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('orderHistory')
+          .doc();
+
+      final cartSnapshot = await cartRef.get();
+      final cartItems = cartSnapshot.docs.map((doc) {
+        final data = doc.data();
+        return {
+          'itemId': doc.id,
+          'quantity': data['quantity'],
+          'totalPrice': (data['totalPrice'] as num).toDouble(),
+          'customization': data['customization'] ?? '',
+        };
+      }).toList();
+
+      await orderRef.set({
+        'orderDate': Timestamp.now(),
+        'totalPrice': _totalPrice,
+        'items': cartItems,
+      });
+
+      // Clear the cart
+      for (var doc in cartSnapshot.docs) {
+        await cartRef.doc(doc.id).delete();
+      }
+
+      _fetchCartItems(); // Clear the cart UI
+    }
+  }
+
+  void _addCustomization(String itemId, String customization) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final cartRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('cart')
+          .doc(itemId);
+
+      await cartRef.update({
+        'customization': customization,
+      });
+
+      _fetchCartItems(); // Refetch cart items after adding customization
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          'MY CART',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 24,
-          ),
-        ),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        elevation: 0,
+        title: const Text("My Cart"),
       ),
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'DEFAULT ADDRESS',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey[600],
-                  ),
-                ),
-                SizedBox(height: 5),
-                Text(
-                  'Bhuvya Shukla\nC1, Flat-401\n+91 8628030194',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.black,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Divider(thickness: 1),
           Expanded(
-            child: ListView(
-              children: [
-                ListTile(
-                  title: Text('Chocolate Cake'),
-                  subtitle: Text('Quantity: 1'),
-                  trailing: Text('₹250'),
-                ),
-                ListTile(
-                  title: Text('Pizza'),
-                  subtitle: Text('Quantity: 2'),
-                  trailing: Text('₹500'),
-                ),
-              ],
-            ),
-          ),
-          Divider(thickness: 1),
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'TOTAL',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  // Display user details
+                  ListTile(
+                    title: Text('Customer Details'),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Name: $userName'),
+                        Text('Phone: $userPhone'),
+                        Text('Address: $userAddress'),
+                      ],
+                    ),
                   ),
-                ),
-                Text(
-                  '₹750',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
+                  const Divider(),
+                  
+                  // Display cart items
+                  ListView.builder(
+                    shrinkWrap: true,
+                    physics: NeverScrollableScrollPhysics(),
+                    itemCount: _cartItems.length,
+                    itemBuilder: (context, index) {
+                      final item = _cartItems[index];
+                      return ListTile(
+                        leading: Image.network(
+                          'https://via.placeholder.com/80', // Placeholder for item image
+                          width: 80,
+                          height: 80,
+                          fit: BoxFit.cover,
+                        ),
+                        title: Text(item['name']),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('₹${item['price']}'),
+                            Row(
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.remove),
+                                  onPressed: () {
+                                    _updateQuantity(item['id'], item['quantity'] - 1, item['price']);
+                                  },
+                                ),
+                                Text('${item['quantity']}'),
+                                IconButton(
+                                  icon: const Icon(Icons.add),
+                                  onPressed: () {
+                                    _updateQuantity(item['id'], item['quantity'] + 1, item['price']);
+                                  },
+                                ),
+                              ],
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                _showCustomizationDialog(item['id'], item['customization']);
+                              },
+                              child: const Text('Add Customization'),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: ElevatedButton(
-              onPressed: () {
-                _showConfirmationDialog(context);
-              },
-              style: ElevatedButton.styleFrom(
-                minimumSize: Size(double.infinity, 50),
+                ],
               ),
-              child: Text('PLACE ORDER'),
+            ),
+          ),
+
+          // Total price and place order button at the bottom
+          Container(
+            padding: const EdgeInsets.all(16.0),
+            color: Colors.white,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('Total: ₹$_totalPrice', style: const TextStyle(fontSize: 18)),
+                const SizedBox(height: 10),
+                ElevatedButton(
+                  onPressed: _placeOrder,
+                  child: const Text('Place Order'),
+                ),
+              ],
             ),
           ),
         ],
@@ -119,72 +245,37 @@ class CartPage extends StatelessWidget {
     );
   }
 
-  void _showConfirmationDialog(BuildContext context) {
+  // Show dialog for customization input
+  void _showCustomizationDialog(String itemId, String currentCustomization) {
+    final TextEditingController customizationController =
+        TextEditingController(text: currentCustomization);
+
     showDialog(
       context: context,
-      builder: (BuildContext context) {
+      builder: (context) {
         return AlertDialog(
-          title: Text('CONFIRM ORDER?'),
+          title: const Text('Add Customization'),
+          content: TextField(
+            controller: customizationController,
+            decoration: const InputDecoration(labelText: 'Customization'),
+          ),
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.pop(context); // Go back to cart page
+                Navigator.of(context).pop();
               },
-              child: Text(
-                'NO',
-                style: TextStyle(color: Colors.red),
-              ),
+              child: const Text('Cancel'),
             ),
-            TextButton(
+            ElevatedButton(
               onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => OrderConfirmedPage()),
-                ); // Navigate to confirmation screen
+                _addCustomization(itemId, customizationController.text);
+                Navigator.of(context).pop();
               },
-              child: Text(
-                'YES',
-                style: TextStyle(color: Colors.green),
-              ),
+              child: const Text('Save'),
             ),
           ],
         );
       },
-    );
-  }
-}
-
-class OrderConfirmedPage extends StatelessWidget {
-  const OrderConfirmedPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.check_circle,
-              color: Colors.green,
-              size: 100,
-            ),
-            SizedBox(height: 20),
-            Text(
-              'THANK YOU FOR ORDERING!',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            SizedBox(height: 10),
-            Text(
-              'YOUR ORDER HAS BEEN CONFIRMED',
-              style: TextStyle(fontSize: 16, color: Colors.grey),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // Import Firestore
+import 'package:firebase_auth/firebase_auth.dart'; // Import FirebaseAuth for the current user
 import 'package:tri/cart_page.dart';
 import 'package:tri/hotel_page.dart'; // Import the HotelPage
 import 'package:tri/favourites_page.dart' as fav_page; // Import FavouritesPage
 import 'package:tri/profile_page.dart' as profile_page; // Import the ProfilePage class
+import 'story_pop_up.dart'; // Import the StoryPopUp
 
 // HomePage class
 class HomePage extends StatefulWidget {
@@ -15,6 +18,25 @@ class HomePage extends StatefulWidget {
 // HomePage state class
 class HomePageState extends State<HomePage> {
   int _currentIndex = 1; // Default to Home tab
+  String? firstName; // Store the first name of the user
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchUserFirstName();
+  }
+
+  Future<void> _fetchUserFirstName() async {
+    User? currentUser = FirebaseAuth.instance.currentUser; // Get the current authenticated user
+    if (currentUser != null) {
+      String? fetchedFirstName = await getFirstName(currentUser.uid); // Call the query from the separate file
+      if (fetchedFirstName != null) {
+        setState(() {
+          firstName = fetchedFirstName; // Update the UI with the fetched first name
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -22,9 +44,9 @@ class HomePageState extends State<HomePage> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        title: const Text(
-          'Hi, Bhuvya',
-          style: TextStyle(
+        title: Text(
+          firstName != null ? 'Hi, $firstName' : 'Hi', // Dynamically display the first name
+          style: const TextStyle(
             color: Colors.black,
             fontWeight: FontWeight.bold,
             fontSize: 24,
@@ -66,74 +88,93 @@ class HomePageState extends State<HomePage> {
               ),
               const SizedBox(height: 16.0),
 
-              // Horizontal list of food images
-              SizedBox(
-                height: 100,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  children: [
-                    _buildFoodImage('assets/food1.png'),
-                    _buildFoodImage('assets/food2.png'),
-                    _buildFoodImage('assets/food3.png'),
-                    _buildFoodImage('assets/food4.png'),
-                  ],
-                ),
+              // Horizontal list of the most liked dishes (Stories) with triangle shape and click behavior for pop-up
+              const Text('Most Liked Dishes', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16.0),
+              StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('items')
+                    .orderBy('likes', descending: true)
+                    .limit(10) // Fetch top 10 most liked dishes
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  if (snapshot.hasData) {
+                    var items = snapshot.data!.docs;
+                    return SizedBox(
+                      height: 120,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: items.length,
+                        itemBuilder: (context, index) {
+                          var item = items[index];
+                          return GestureDetector(
+                            onTap: () {
+                              // Open a pop-up when the item is clicked
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => StoryPopUp(itemId: item.id), // Link to story_pop_up.dart
+                                ),
+                              );
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 8.0), // Add space between items
+                              child: ClipPath(
+                                clipper: TriangleClipper(),
+                                child: Image.network(
+                                  item['image'],
+                                  width: 80,
+                                  height: 80,
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    );
+                  } else if (snapshot.hasError) {
+                    return Text('Error loading most liked dishes');
+                  } else {
+                    return CircularProgressIndicator();
+                  }
+                },
               ),
-              const SizedBox(height: 20.0),
+              const SizedBox(height: 16.0),
 
-              // Restaurant list
-              GestureDetector(
-                onTap: () {
-                  // Navigate to HotelPage when this restaurant is clicked
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => HotelPage(), // Pass data if needed
-                    ),
-                  );
+              // Restaurant list from Firestore 'restaurant' collection (Convert restaurantId to String)
+              StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance.collection('restaurant').snapshots(),
+                builder: (context, snapshot) {
+                  if (snapshot.hasData) {
+                    var restaurants = snapshot.data!.docs;
+                    return Column(
+                      children: restaurants.map((restaurant) {
+                        return GestureDetector(
+                          onTap: () {
+                            // Convert restaurantId (int) to String before passing it
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => HotelPage(restaurant_id: restaurant['restaurant_id'].toString()), // Pass the correct restaurantId as a String
+                              ),
+                            );
+                          },
+                          child: RestaurantCard(
+                            image: restaurant['image'],
+                            name: restaurant['name'],
+                            status: restaurant['status'],
+                            time: restaurant['time'],
+                          ),
+                        );
+                      }).toList(),
+                    );
+                  } else if (snapshot.hasError) {
+                    return Text('Error loading restaurants');
+                  } else {
+                    return CircularProgressIndicator();
+                  }
                 },
-                child: const RestaurantCard(
-                  image: 'assets/restaurant1.png',
-                  name: 'Ekaant',
-                  status: 'Open',
-                  time: '30-35 mins',
-                ),
-              ),
-              const SizedBox(height: 10.0),
-              GestureDetector(
-                onTap: () {
-                  // Navigate to HotelPage when this restaurant is clicked
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => HotelPage(), // Pass data if needed
-                    ),
-                  );
-                },
-                child: const RestaurantCard(
-                  image: 'assets/restaurant2.png',
-                  name: 'Antariksh',
-                  status: 'Closed',
-                  time: '50-55 mins',
-                ),
-              ),
-              const SizedBox(height: 10.0),
-              GestureDetector(
-                onTap: () {
-                  // Navigate to HotelPage when this restaurant is clicked
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => HotelPage(), // Pass data if needed
-                    ),
-                  );
-                },
-                child: const RestaurantCard(
-                  image: 'assets/restaurant3.png',
-                  name: 'Aashirwad',
-                  status: 'Open',
-                  time: '30-35 mins',
-                ),
               ),
             ],
           ),
@@ -179,21 +220,23 @@ class HomePageState extends State<HomePage> {
       ),
     );
   }
+}
 
-  // Helper method to build food images
-  Widget _buildFoodImage(String assetPath) {
-    return Container(
-      margin: const EdgeInsets.only(right: 10.0),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(8.0),
-        child: Image.asset(
-          assetPath,
-          width: 100,
-          height: 100,
-          fit: BoxFit.cover,
-        ),
-      ),
-    );
+// Triangle Clipper for triangular-shaped images
+class TriangleClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) {
+    Path path = Path();
+    path.lineTo(size.width / 2, 0);
+    path.lineTo(size.width, size.height);
+    path.lineTo(0, size.height);
+    path.close();
+    return path;
+  }
+
+  @override
+  bool shouldReclip(covariant CustomClipper<Path> oldClipper) {
+    return false;
   }
 }
 
@@ -223,7 +266,7 @@ class RestaurantCard extends StatelessWidget {
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(10.0),
-            child: Image.asset(
+            child: Image.network(
               image,
               width: 100,
               height: 100,
@@ -254,5 +297,26 @@ class RestaurantCard extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+// Method to get the first name from Firestore
+Future<String?> getFirstName(String userId) async {
+  try {
+    // Reference the Firestore collection
+    DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
+
+    if (userDoc.exists) {
+      // Fetch the 'name' field
+      String fullName = userDoc.get('username');
+      // Extract the first name from the full name
+      String firstName = fullName.split(' ')[0]; // Split by space and get the first part
+      return firstName;
+    } else {
+      return null; // User not found
+    }
+  } catch (e) {
+    print('Error fetching user data: $e');
+    return null;
   }
 }

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:tri/home_page.dart' as home_page; // Import HomePage
 import 'package:tri/profile_page.dart'; // Import ProfilePage
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // For currentUser
 import 'share_popup.dart';
 
 class FavouritesPage extends StatelessWidget {
@@ -8,38 +10,49 @@ class FavouritesPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final currentUserId = FirebaseAuth.instance.currentUser!.uid;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Favourites'),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          FavouriteItem(
-            imageUrl: 'assets/chocolate_cake.png',
-            title: 'Chocolate Cake',
-            price: '₹500',
-            isVeg: true,
-          ),
-          FavouriteItem(
-            imageUrl: 'assets/chicken_tikka.png',
-            title: 'Chicken Tikka',
-            price: '₹260',
-            isVeg: false,
-          ),
-          FavouriteItem(
-            imageUrl: 'assets/red_sauce_pasta.png',
-            title: 'Red Sauce Pasta',
-            price: '₹180',
-            isVeg: true,
-          ),
-          FavouriteItem(
-            imageUrl: 'assets/chicken_tikka.png',
-            title: 'Chicken Tikka',
-            price: '₹260',
-            isVeg: false,
-          ),
-        ],
+      body: StreamBuilder(
+        stream: FirebaseFirestore.instance.collection('items').snapshots(),
+        builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return Center(child: CircularProgressIndicator());
+          }
+
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
+          }
+
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return Center(child: Text('No items available.'));
+          }
+
+          final items = snapshot.data!.docs;
+
+          return ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: items.length,
+            itemBuilder: (context, index) {
+              final item = items[index].data() as Map<String, dynamic>;
+              final bool isLiked = (item['likedByUsers'] ?? []).contains(currentUserId);
+
+              if (!isLiked) {
+                return SizedBox.shrink(); // Don't show items that aren't liked
+              }
+
+              return FavouriteItem(
+                imageUrl: item['image'],
+                title: item['name'],
+                price: '₹${item['price']}',
+                isVeg: item['isVeg'] ?? false,
+              );
+            },
+          );
+        },
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: 0, // Highlight the current tab (Favorites)
@@ -107,11 +120,25 @@ class FavouriteItem extends StatelessWidget {
           // Food Image
           ClipRRect(
             borderRadius: BorderRadius.circular(8.0),
-            child: Image.asset(
+            child: Image.network(
               imageUrl,
               height: 80,
               width: 80,
               fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                return Icon(Icons.error, color: Colors.red, size: 80);
+              },
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+                return Center(
+                  child: CircularProgressIndicator(
+                    value: loadingProgress.expectedTotalBytes != null
+                        ? loadingProgress.cumulativeBytesLoaded /
+                            (loadingProgress.expectedTotalBytes ?? 1)
+                        : null,
+                  ),
+                );
+              },
             ),
           ),
           const SizedBox(width: 16),
@@ -160,3 +187,5 @@ class FavouriteItem extends StatelessWidget {
     );
   }
 }
+
+

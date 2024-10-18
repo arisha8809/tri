@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // Import Firestore package
 import 'home_page.dart'; // Import the home page after successful login
 
 class LoginPage extends StatefulWidget {
@@ -11,6 +12,8 @@ class LoginPage extends StatefulWidget {
 
 class LoginPageState extends State<LoginPage> {
   final FirebaseAuth auth = FirebaseAuth.instance;
+  final FirebaseFirestore firestore = FirebaseFirestore.instance; // Firestore instance
+
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
   final TextEditingController fullNameController = TextEditingController();
@@ -68,7 +71,14 @@ class LoginPageState extends State<LoginPage> {
         await user.sendEmailVerification();
         showErrorDialog("Please verify your email.");
       } else {
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const HomePage()));
+        // Fetch user data from Firestore
+        DocumentSnapshot userDoc = await firestore.collection('users').doc(user?.uid).get();
+
+        if (userDoc.exists) {
+          Navigator.push(context, MaterialPageRoute(builder: (context) => const HomePage()));
+        } else {
+          showErrorDialog("User not found in Firestore.");
+        }
       }
     } catch (e) {
       showErrorDialog(e.toString());
@@ -79,6 +89,8 @@ class LoginPageState extends State<LoginPage> {
     String email = emailController.text.trim();
     String password = passwordController.text.trim();
     String confirmPassword = confirmPasswordController.text.trim();
+    String fullName = fullNameController.text.trim();
+    String phoneNumber = phoneController.text.trim();
 
     if (email.isEmpty || password.isEmpty || confirmPassword.isEmpty || password != confirmPassword) {
       setState(() {
@@ -88,8 +100,25 @@ class LoginPageState extends State<LoginPage> {
     }
 
     try {
-      await auth.createUserWithEmailAndPassword(email: email, password: password);
-      Navigator.push(context, MaterialPageRoute(builder: (context) => const HomePage()));
+      UserCredential userCredential = await auth.createUserWithEmailAndPassword(email: email, password: password);
+      User? user = userCredential.user;
+
+      if (user != null) {
+        // Add user details to Firestore
+        await firestore.collection('users').doc(user.uid).set({
+          'userId': user.uid,
+          'username': fullName,
+          'email': user.email,
+          'phone_number': phoneNumber,
+          'created_on': DateTime.now(),
+          'is_email_verified': user.emailVerified,
+          'role': 'customer',
+          'status': 'active',
+          'address': '', // You can add address if needed later
+        });
+
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const HomePage()));
+      }
     } catch (e) {
       showErrorDialog(e.toString());
     }

@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // Import Firestore
+import 'package:firebase_auth/firebase_auth.dart'; // Import FirebaseAuth for the current user
 import 'package:tri/order_history_page.dart'; // Ensure this path is correct
 import 'package:tri/about_us.dart'; // Ensure this path is correct
 import 'package:tri/favourites_page.dart'; // Ensure this path is correct
 import 'package:tri/home_page.dart'; // Ensure this path is correct
 import 'package:tri/help_page.dart'; // Ensure this path is correct
 import 'package:tri/logout_page.dart'; // Ensure this path is correct
+import 'user_service.dart' as user_service;  // Import user_service if needed for user-specific logic
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -16,78 +19,103 @@ class ProfilePage extends StatefulWidget {
 class ProfilePageState extends State<ProfilePage> {
   final int _currentIndex = 2; // Highlight Profile icon
 
+  Future<String?> _fetchUserFullName() async {
+    User? currentUser = FirebaseAuth.instance.currentUser; // Get the current authenticated user
+    if (currentUser != null) {
+      String? fullName = await getFullName(currentUser.uid); // Fetch full name from Firestore
+      return fullName;
+    }
+    return null; // Return null if user is not authenticated
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Profile Page'),
+        title: const Text('Profile Page'),
       ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Profile Picture in Triangle shape
-            ClipPath(
-              clipper: TriangleClipper(),
-              child: Image.asset(
-                'assets/profile_picture.png', // Ensure to use your own image path
-                height: 120,
-                width: 120,
-                fit: BoxFit.cover,
-              ),
+      body: FutureBuilder<String?>(
+        future: _fetchUserFullName(), // Fetch the full name
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            // Show a loading spinner while waiting for the data
+            return const Center(child: CircularProgressIndicator());
+          } else if (snapshot.hasError) {
+            // Handle any errors
+            return Center(child: Text('Error: ${snapshot.error}'));
+          } else if (!snapshot.hasData || snapshot.data == null) {
+            // If no data, show a fallback message
+            return const Center(child: Text('User not found'));
+          }
+
+          // Once the data is available, display the profile UI
+          String fullName = snapshot.data!; // Get the full name
+
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Profile Picture in Triangle shape
+                ClipPath(
+                  clipper: TriangleClipper(),
+                  child: Image.asset(
+                    'assets/profile_picture.png', // Ensure to use your own image path
+                    height: 120,
+                    width: 120,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                // Display the fetched full name
+                Text(
+                  fullName,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                // Navigation ListTiles
+                ListTile(
+                  title: const Text('Order History'),
+                  onTap: () {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (context) => OrderHistoryPage()),
+                    );
+                  },
+                ),
+                ListTile(
+                  title: const Text('About Us'),
+                  onTap: () {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (context) => AboutUsPage()),
+                    );
+                  },
+                ),
+                ListTile(
+                  title: const Text('Help'),
+                  onTap: () {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (context) => HelpPage()),
+                    );
+                  },
+                ),
+                ListTile(
+                  title: const Text('Log Out'),
+                  onTap: () {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (context) => LogoutPage()),
+                    );
+                  },
+                ),
+              ],
             ),
-            SizedBox(height: 10),
-            Text(
-              'Bhuvya Shukla',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            Text(
-              '+91 8628030194',
-              style: TextStyle(color: Colors.grey),
-            ),
-            SizedBox(height: 20),
-            // Navigation ListTiles
-            ListTile(
-              title: Text('Order History'),
-              onTap: () {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (context) => OrderHistoryPage()),
-                );
-              },
-            ),
-            ListTile(
-              title: Text('About Us'),
-              onTap: () {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (context) => AboutUsPage()),
-                );
-              },
-            ),
-            ListTile(
-              title: Text('Help'),
-              onTap: () {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (context) => HelpPage()),
-                );
-              },
-            ),
-            ListTile(
-              title: Text('Log Out'),
-              onTap: () {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (context) => LogoutPage()),
-                );
-              },
-            ),
-          ],
-        ),
+          );
+        },
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex, // Highlight the Profile icon
@@ -143,4 +171,23 @@ class TriangleClipper extends CustomClipper<Path> {
 
   @override
   bool shouldReclip(CustomClipper<Path> oldClipper) => false;
+}
+
+// Function to fetch the full name from Firestore
+Future<String?> getFullName(String userId) async {
+  try {
+    // Reference the Firestore collection
+    DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
+
+    if (userDoc.exists) {
+      // Fetch the 'username' field
+      String fullName = userDoc.get('username');
+      return fullName; // Return the full name
+    } else {
+      return null; // User not found
+    }
+  } catch (e) {
+    print('Error fetching user data: $e');
+    return null;
+  }
 }

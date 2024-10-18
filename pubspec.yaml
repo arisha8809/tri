@@ -34,4 +34,4 @@ flutter:
     - assets/restaurant3.png
     - assets/red_sauce_pasta.png
     - assets/chocolate_cake.png
-    - assets/chicken_tikka.png # Ensure this path and file exist in your project
+    - assets/chicken_tikka.png  # Ensure this path and file exist in your project
