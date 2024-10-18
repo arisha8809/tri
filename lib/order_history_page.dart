@@ -1,15 +1,30 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // Firestore import
+import 'package:firebase_auth/firebase_auth.dart'; // FirebaseAuth for currentUser
+import 'profile_page.dart'; // Import the ProfilePage
 
 class OrderHistoryPage extends StatelessWidget {
   const OrderHistoryPage({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          onPressed: () {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const ProfilePage()),
+            ); // Navigate back to the ProfilePage
+          },
+        ),
         title: const Text(
           'Order History',
           style: TextStyle(
@@ -19,60 +34,81 @@ class OrderHistoryPage extends StatelessWidget {
           ),
         ),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: ListView(
-          children: const [
-            OrderCard(
-              image: 'assets/chocolate_cake.png',
-              title: 'Chocolate Cake',
-              price: '₹500',
-              date: 'Today',
+      body: userId == null
+          ? const Center(
+              child: Text('Please log in to view order history'),
+            )
+          : StreamBuilder(
+              stream: FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(userId)
+                  .collection('orderHistory')
+                  .orderBy('orderDate', descending: true)
+                  .snapshots(),
+              builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (snapshot.hasError) {
+                  return Center(child: Text('Error: ${snapshot.error}'));
+                }
+
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return const Center(
+                    child: Text('No order history available.'),
+                  );
+                }
+
+                final orders = snapshot.data!.docs;
+
+                return ListView.builder(
+                  padding: const EdgeInsets.all(16.0),
+                  itemCount: orders.length,
+                  itemBuilder: (context, index) {
+                    final order = orders[index].data() as Map<String, dynamic>;
+                    final orderDate = (order['orderDate'] as Timestamp?)?.toDate() ?? DateTime.now(); // Null safety for orderDate
+                    final totalPrice = order['totalPrice'] ?? '0.00'; // Assuming totalPrice is stored in the order
+                    final itemCount = (order['items'] as List<dynamic>?)?.length ?? 0; // Count of items in the order
+
+                    return OrderCard(
+                      totalPrice: '₹$totalPrice',
+                      orderDate: orderDate,
+                      itemCount: itemCount,
+                    );
+                  },
+                );
+              },
             ),
-            OrderCard(
-              image: 'assets/chicken_tikka.png',
-              title: 'Chicken Tikka',
-              price: '₹260',
-              date: 'Yesterday',
-            ),
-            OrderCard(
-              image: 'assets/red_sauce_pasta.png',
-              title: 'Red Sauce Pasta',
-              price: '₹180',
-              date: '03.09.24',
-            ),
-            OrderCard(
-              image: 'assets/chicken_tikka.png',
-              title: 'Chicken Tikka',
-              price: '₹260',
-              date: '04.09.24',
-            ),
-            OrderCard(
-              image: 'assets/chocolate_cake.png',
-              title: 'Chocolate Cake',
-              price: '₹500',
-              date: '05.09.24',
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
 
 class OrderCard extends StatelessWidget {
-  final String image;
-  final String title;
-  final String price;
-  final String date;
+  final String totalPrice;
+  final DateTime orderDate;
+  final int itemCount;
 
   const OrderCard({
     super.key,
-    required this.image,
-    required this.title,
-    required this.price,
-    required this.date,
+    required this.totalPrice,
+    required this.orderDate,
+    required this.itemCount,
   });
+
+  // Function to format the order date as "Today," "Yesterday," or a specific date
+  String getFormattedDate(DateTime date) {
+    final now = DateTime.now();
+    final difference = now.difference(date).inDays;
+
+    if (difference == 0) {
+      return 'Today';
+    } else if (difference == 1) {
+      return 'Yesterday';
+    } else {
+      return DateFormat('dd.MM.yy').format(date);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -82,35 +118,18 @@ class OrderCard extends StatelessWidget {
       margin: const EdgeInsets.symmetric(vertical: 8.0),
       child: ListTile(
         contentPadding: const EdgeInsets.all(8.0),
-        leading: ClipRRect(
-          borderRadius: BorderRadius.circular(8.0),
-          child: Image.asset(
-            image,
-            width: 60,
-            height: 60,
-            fit: BoxFit.cover,
-          ),
-        ),
-        title: Text(
-          title,
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              price,
+              'Order - $itemCount items',
               style: const TextStyle(
-                fontSize: 16,
-                color: Colors.black,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 4.0),
             Text(
-              date,
+              getFormattedDate(orderDate),
               style: const TextStyle(
                 fontSize: 14,
                 color: Colors.grey,
@@ -118,11 +137,12 @@ class OrderCard extends StatelessWidget {
             ),
           ],
         ),
-        trailing: IconButton(
-          icon: const Icon(Icons.more_vert),
-          onPressed: () {
-            // Add action when more button is clicked
-          },
+        subtitle: Text(
+          'Total: $totalPrice',
+          style: const TextStyle(
+            fontSize: 16,
+            color: Colors.black,
+          ),
         ),
       ),
     );

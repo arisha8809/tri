@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:math'; // For the triangle animation
 
 class CartPage extends StatefulWidget {
   @override
@@ -32,7 +33,6 @@ class _CartPageState extends State<CartPage> {
 
       if (userSnapshot.exists) {
         setState(() {
-          // Fetch 'username' instead of 'name'
           userName = userSnapshot.data()?['username'] ?? 'N/A'; 
           userAddress = userSnapshot.data()?['address'] ?? 'N/A'; 
           userPhone = userSnapshot.data()?['phone_number'] ?? 'N/A'; 
@@ -57,12 +57,12 @@ class _CartPageState extends State<CartPage> {
         totalPrice += (data['totalPrice'] as num).toDouble(); // Ensure double type for prices
         return {
           'id': doc.id,
-          'name': data['name'] ?? 'Unknown Item', // Fallback if name is null
+          'name': data['name'] ?? 'Unknown Item',
           'price': (data['price'] as num).toDouble(),
-          'quantity': data['quantity'] ?? 1, // Default quantity to 1
+          'quantity': data['quantity'] ?? 1, 
           'totalPrice': (data['totalPrice'] as num).toDouble(),
-          'customization': data['customization'] ?? '', // Handle customization field
-          'image': data['image'] ?? '', // Handle missing images
+          'customization': data['customization'] ?? '', 
+          'image': data['image'] ?? '', 
         };
       }).toList();
 
@@ -94,131 +94,6 @@ class _CartPageState extends State<CartPage> {
 
       _fetchCartItems(); // Refetch cart items after update
     }
-  }
-
-  // Add or update customization for cart items
-  void _addCustomization(String itemId, String customization) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      final cartRef = FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .collection('cart')
-          .doc(itemId);
-
-      await cartRef.update({
-        'customization': customization,
-      });
-
-      _fetchCartItems(); // Refetch cart items after adding customization
-    }
-  }
-
-  // Update user details in Firestore
-  Future<void> _updateUserDetails(String newName, String newPhone, String newAddress) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .update({
-        'username': newName, // Update username instead of name
-        'phone_number': newPhone,
-        'address': newAddress,
-      });
-
-      // Update local state after saving changes
-      setState(() {
-        userName = newName;
-        userPhone = newPhone;
-        userAddress = newAddress;
-      });
-    }
-  }
-
-  // Show dialog to edit user details
-  void _showEditDialog() {
-    final TextEditingController nameController = TextEditingController(text: userName);
-    final TextEditingController phoneController = TextEditingController(text: userPhone);
-    final TextEditingController addressController = TextEditingController(text: userAddress);
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Edit Details'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(labelText: 'Username'),
-              ),
-              TextField(
-                controller: phoneController,
-                decoration: const InputDecoration(labelText: 'Phone Number'),
-                keyboardType: TextInputType.phone,
-              ),
-              TextField(
-                controller: addressController,
-                decoration: const InputDecoration(labelText: 'Address'),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                _updateUserDetails(
-                  nameController.text,
-                  phoneController.text,
-                  addressController.text,
-                );
-                Navigator.of(context).pop();
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  // Show dialog for customization input
-  void _showCustomizationDialog(String itemId, String currentCustomization) {
-    final TextEditingController customizationController =
-        TextEditingController(text: currentCustomization);
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Add Customization'),
-          content: TextField(
-            controller: customizationController,
-            decoration: const InputDecoration(labelText: 'Customization'),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                _addCustomization(itemId, customizationController.text);
-                Navigator.of(context).pop();
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        );
-      },
-    );
   }
 
   // Place the order and clear the cart
@@ -259,31 +134,25 @@ class _CartPageState extends State<CartPage> {
       }
 
       _fetchCartItems(); // Clear the cart UI after placing order
-      _showConfirmationDialog(); // Show order confirmation dialog
+      _showLoadingAndConfirmationDialog(); // Show loading and confirmation dialog
     }
   }
 
-  // Show the order confirmation dialog
-  void _showConfirmationDialog() {
+  // Function to display the spinning triangle followed by confirmation
+  void _showLoadingAndConfirmationDialog() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Confirm Order?"),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text("NO", style: TextStyle(color: Colors.red)),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              _showThankYouScreen();
-            },
-            child: const Text("YES", style: TextStyle(color: Colors.green)),
-          ),
-        ],
-      ),
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return const SpinningTriangleDialog();
+      },
     );
+
+    // Simulate a delay (order processing time), then show confirmation
+    Future.delayed(const Duration(seconds: 3), () {
+      Navigator.pop(context); // Close loading dialog
+      _showThankYouScreen(); // Show thank you screen after order is confirmed
+    });
   }
 
   // Show the Thank You screen after the order is placed
@@ -315,10 +184,6 @@ class _CartPageState extends State<CartPage> {
                 Text('Address: $userAddress'),
               ],
             ),
-            trailing: TextButton(
-              onPressed: _showEditDialog, // Edit button triggers the dialog
-              child: const Text('Edit'),
-            ),
           ),
           const Divider(),
 
@@ -331,23 +196,17 @@ class _CartPageState extends State<CartPage> {
                 return ListTile(
                   leading: item['image'].isNotEmpty
                       ? Image.network(
-                          item['image'], // Display item image
+                          item['image'], 
                           width: 80,
                           height: 80,
                           fit: BoxFit.cover,
                         )
-                      : const Icon(Icons.image, size: 80), // Fallback if no image
+                      : const Icon(Icons.image, size: 80),
                   title: Text(item['name']),
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('₹${item['price']} x ${item['quantity']}'),
-                      TextButton(
-                        onPressed: () {
-                          _showCustomizationDialog(item['id'], item['customization']);
-                        },
-                        child: const Text('Add Customization'),
-                      ),
                     ],
                   ),
                   trailing: Text('Total: ₹${item['totalPrice']}'),
@@ -373,6 +232,81 @@ class _CartPageState extends State<CartPage> {
         ],
       ),
     );
+  }
+}
+
+// Spinning triangle loading animation
+class SpinningTriangleDialog extends StatefulWidget {
+  const SpinningTriangleDialog({super.key});
+
+  @override
+  _SpinningTriangleDialogState createState() => _SpinningTriangleDialogState();
+}
+
+class _SpinningTriangleDialogState extends State<SpinningTriangleDialog>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat(); // Start rotating the triangle
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            RotationTransition(
+              turns: _controller,
+              child: CustomPaint(
+                size: const Size(60, 60),
+                painter: TrianglePainter(),
+              ),
+            ),
+            const SizedBox(height: 10),
+            const Text('Processing Order...'),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// Custom painter for the triangle
+class TrianglePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Paint paint = Paint()
+      ..color = Colors.green
+      ..style = PaintingStyle.fill;
+
+    final Path path = Path();
+    path.moveTo(size.width / 2, 0);
+    path.lineTo(size.width, size.height);
+    path.lineTo(0, size.height);
+    path.close();
+
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) {
+    return false;
   }
 }
 
