@@ -4,6 +4,7 @@ import 'package:tri/favourites_page.dart' as fav_page;
 import 'package:tri/profile_page.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/animation.dart';
 
 class HotelPage extends StatefulWidget {
   final String restaurant_id; // Add restaurantId as a parameter
@@ -14,9 +15,30 @@ class HotelPage extends StatefulWidget {
   HotelPageState createState() => HotelPageState();
 }
 
-class HotelPageState extends State<HotelPage> {
+class HotelPageState extends State<HotelPage> with SingleTickerProviderStateMixin {
   final int _currentIndex = 1; // Set to 1 for Home, indicating current page
   final FirebaseAuth auth = FirebaseAuth.instance; // Access Firebase Auth
+  late AnimationController _controller;
+  late Animation<Offset> _cartAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 500),
+      vsync: this,
+    );
+    _cartAnimation = Tween<Offset>(
+      begin: Offset.zero,
+      end: const Offset(0.2, 0.2),
+    ).animate(_controller);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   // Method to show a centered message
   void _showCenteredMessage(String message) {
@@ -116,7 +138,11 @@ class HotelPageState extends State<HotelPage> {
       });
     }
 
-    _showCenteredMessage("Item added to cart");
+    // Show animation and pop-up
+    _controller.forward().then((_) {
+      _controller.reverse();
+      _showCenteredMessage("Item added to cart");
+    });
   }
 
   // Method to increase quantity of an item
@@ -228,17 +254,20 @@ class HotelPageState extends State<HotelPage> {
               final itemData = item.data() as Map<String, dynamic>;
               final isLiked = (itemData['likedByUsers'] ?? []).contains(auth.currentUser?.uid);
 
-              return HotelMenuItem(
-                itemId: itemId,
-                imageUrl: itemData['image'],
-                name: itemData['name'],
-                price: itemData['price'].toString(),
-                likes: itemData['likes'].toString(),
-                isLiked: isLiked,
-                onLikeToggle: () => _toggleLike(itemId, isLiked),
-                onAddToCart: () => _addToCart(itemId, itemData['name'], (itemData['price'] as num).toDouble()),
-                onIncreaseQuantity: () => _increaseQuantity(itemId, (itemData['price'] as num).toDouble()),
-                onDecreaseQuantity: () => _decreaseQuantity(itemId, (itemData['price'] as num).toDouble()),
+              return SlideTransition(
+                position: _cartAnimation,
+                child: HotelMenuItem(
+                  itemId: itemId,
+                  imageUrl: itemData['image'],
+                  name: itemData['name'],
+                  price: itemData['price'].toString(),
+                  likes: itemData['likes'].toString(),
+                  isLiked: isLiked,
+                  onLikeToggle: () => _toggleLike(itemId, isLiked),
+                  onAddToCart: () => _addToCart(itemId, itemData['name'], (itemData['price'] as num).toDouble()),
+                  onIncreaseQuantity: () => _increaseQuantity(itemId, (itemData['price'] as num).toDouble()),
+                  onDecreaseQuantity: () => _decreaseQuantity(itemId, (itemData['price'] as num).toDouble()),
+                ),
               );
             },
           );
