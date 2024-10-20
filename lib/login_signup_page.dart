@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart'; // Import Firestore package
+import 'dart:math'; // For the triangle animation
 import 'home_page.dart'; // Import the home page after successful login
 
 class LoginPage extends StatefulWidget {
@@ -28,6 +29,7 @@ class LoginPageState extends State<LoginPage> {
   int currentTranslationIndex = 0;
   bool showErrorMessages = false;
   bool isLogin = true; // Flag to toggle between login and signup
+  bool loading = false; // Flag for loading state
 
   @override
   void initState() {
@@ -46,12 +48,17 @@ class LoginPageState extends State<LoginPage> {
   }
 
   Future<void> login() async {
+    setState(() {
+      loading = true; // Start loading
+    });
+
     String email = emailController.text.trim();
     String password = passwordController.text.trim();
 
     if (email.isEmpty || !RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(email)) {
       setState(() {
         showErrorMessages = true;
+        loading = false; // Stop loading
       });
       return;
     }
@@ -59,6 +66,7 @@ class LoginPageState extends State<LoginPage> {
     if (password.isEmpty || password.length < 6) {
       setState(() {
         showErrorMessages = true;
+        loading = false; // Stop loading
       });
       return;
     }
@@ -75,17 +83,25 @@ class LoginPageState extends State<LoginPage> {
         DocumentSnapshot userDoc = await firestore.collection('users').doc(user?.uid).get();
 
         if (userDoc.exists) {
-          Navigator.push(context, MaterialPageRoute(builder: (context) => const HomePage()));
+          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const HomePage()));
         } else {
           showErrorDialog("User not found in Firestore.");
         }
       }
     } catch (e) {
       showErrorDialog(e.toString());
+    } finally {
+      setState(() {
+        loading = false; // Stop loading
+      });
     }
   }
 
   Future<void> signUp() async {
+    setState(() {
+      loading = true; // Start loading
+    });
+
     String email = emailController.text.trim();
     String password = passwordController.text.trim();
     String confirmPassword = confirmPasswordController.text.trim();
@@ -95,6 +111,7 @@ class LoginPageState extends State<LoginPage> {
     if (email.isEmpty || password.isEmpty || confirmPassword.isEmpty || password != confirmPassword) {
       setState(() {
         showErrorMessages = true;
+        loading = false; // Stop loading
       });
       return;
     }
@@ -117,10 +134,14 @@ class LoginPageState extends State<LoginPage> {
           'address': '', // You can add address if needed later
         });
 
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const HomePage()));
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const HomePage()));
       }
     } catch (e) {
       showErrorDialog(e.toString());
+    } finally {
+      setState(() {
+        loading = false; // Stop loading
+      });
     }
   }
 
@@ -165,7 +186,7 @@ class LoginPageState extends State<LoginPage> {
                 ),
               ),
               const SizedBox(height: 20),
-              
+
               // Full Name (Visible only in Signup mode)
               if (!isLogin)
                 Column(
@@ -260,29 +281,98 @@ class LoginPageState extends State<LoginPage> {
                   ],
                 ),
 
+              // Loading indicator when processing login/signup
+              if (loading)
+                const TriangleRotationAnimation(), // Use the triangle loading animation
+              const SizedBox(height: 16),
+
               // Log In or Sign Up Button
-              ElevatedButton(
-                onPressed: isLogin ? login : signUp,
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
+              if (!loading)
+                ElevatedButton(
+                  onPressed: isLogin ? login : signUp,
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
+                  ),
+                  child: Text(isLogin ? 'Log In' : 'Sign Up'),
                 ),
-                child: Text(isLogin ? 'Log In' : 'Sign Up'),
-              ),
               const SizedBox(height: 16),
 
               // Toggle between Log In and Sign Up
-              TextButton(
-                onPressed: () {
-                  setState(() {
-                    isLogin = !isLogin; // Toggle login and signup
-                  });
-                },
-                child: Text(isLogin ? 'Don\'t have an account? Sign Up' : 'Already have an account? Log In'),
-              ),
-            ],
-          ),
-        ),
+              if (!loading)
+                TextButton(
+                  onPressed: () {
+                    setState(() {
+                      isLogin = !isLogin; // Toggle login and signup
+                                       });
+                                },
+                                child: Text(isLogin ? 'Don\'t have an account? Sign Up' : 'Already have an account? Log In'),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }
+                }
+
+// Triangle rotation animation for loading
+class TriangleRotationAnimation extends StatefulWidget {
+  const TriangleRotationAnimation({super.key});
+
+  @override
+  _TriangleRotationAnimationState createState() => _TriangleRotationAnimationState();
+}
+
+class _TriangleRotationAnimationState extends State<TriangleRotationAnimation>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(seconds: 2),
+      vsync: this,
+    )..repeat(); // Start the triangle rotation
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RotationTransition(
+      turns: _controller,
+      child: CustomPaint(
+        size: const Size(80, 80), // Size of the triangle
+        painter: TrianglePainter(),
       ),
     );
+  }
+}
+
+// Custom painter for drawing the triangle
+class TrianglePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Paint paint = Paint()
+      ..color = Colors.green // You can change the color of the triangle here
+      ..style = PaintingStyle.fill;
+
+    final Path path = Path();
+    path.moveTo(size.width / 2, 0); // Start at the top center
+    path.lineTo(size.width, size.height); // Draw to the bottom right
+    path.lineTo(0, size.height); // Draw to the bottom left
+    path.close(); // Close the triangle path
+
+    canvas.drawPath(path, paint); // Draw the triangle
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) {
+    return false; // No need to repaint as the triangle stays the same
   }
 }

@@ -14,6 +14,7 @@ class _CartPageState extends State<CartPage> {
   String userName = 'N/A';  // Default value for username
   String userAddress = 'N/A';
   String userPhone = 'N/A';
+  String _deliveryTime = 'N/A'; // To store the delivery time from the restaurant
 
   @override
   void initState() {
@@ -41,7 +42,80 @@ class _CartPageState extends State<CartPage> {
     }
   }
 
-  // Fetch cart items from Firestore
+  // Show dialog to edit user details
+  void _showEditDialog() {
+    final TextEditingController nameController = TextEditingController(text: userName);
+    final TextEditingController phoneController = TextEditingController(text: userPhone);
+    final TextEditingController addressController = TextEditingController(text: userAddress);
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Edit Details'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(labelText: 'Username'),
+              ),
+              TextField(
+                controller: phoneController,
+                decoration: const InputDecoration(labelText: 'Phone Number'),
+                keyboardType: TextInputType.phone,
+              ),
+              TextField(
+                controller: addressController,
+                decoration: const InputDecoration(labelText: 'Address'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                _updateUserDetails(
+                  nameController.text,
+                  phoneController.text,
+                  addressController.text,
+                );
+                Navigator.of(context).pop();
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Update user details in Firestore
+  Future<void> _updateUserDetails(String newName, String newPhone, String newAddress) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .update({
+        'username': newName, // Update username instead of name
+        'phone_number': newPhone,
+        'address': newAddress,
+      });
+
+      // Update local state after saving changes
+      setState(() {
+        userName = newName;
+        userPhone = newPhone;
+        userAddress = newAddress;
+      });
+    }
+  }
+
+  // Fetch cart items without restricting to one restaurant
   Future<void> _fetchCartItems() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
@@ -52,24 +126,114 @@ class _CartPageState extends State<CartPage> {
           .get();
 
       double totalPrice = 0.0;
-      final cartItems = cartSnapshot.docs.map((doc) {
+
+      final cartItems = await Future.wait(cartSnapshot.docs.map((doc) async {
         final data = doc.data();
-        totalPrice += (data['totalPrice'] as num).toDouble(); // Ensure double type for prices
+        final itemSnapshot = await FirebaseFirestore.instance
+            .collection('items')
+            .doc(doc.id)
+            .get();
+        final itemData = itemSnapshot.data() ?? {};
+
+        totalPrice += (data['totalPrice'] as num).toDouble();
         return {
           'id': doc.id,
-          'name': data['name'] ?? 'Unknown Item',
+          'name': itemData['name'] ?? 'Unknown Item',
           'price': (data['price'] as num).toDouble(),
-          'quantity': data['quantity'] ?? 1, 
+          'quantity': data['quantity'] ?? 1,
           'totalPrice': (data['totalPrice'] as num).toDouble(),
-          'customization': data['customization'] ?? '', 
-          'image': data['image'] ?? '', 
+          'customization': data['customization'] ?? '', // Fetch customization if it exists
+          'image': itemData['image'] ?? '',
+          'restaurant_id': itemData['restaurant_id'] ?? 'Unknown Restaurant',
         };
-      }).toList();
+      }).toList());
 
       setState(() {
         _cartItems = cartItems;
         _totalPrice = totalPrice;
+        if (_cartItems.isNotEmpty) {
+          // Fetch restaurant details for delivery time using the restaurant_id of the first item
+          _fetchRestaurantDetails(_cartItems[0]['restaurant_id']);
+        } else {
+          _deliveryTime = 'N/A'; // Default when no items in the cart
+        }
       });
+    }
+  }
+
+  // Fetch restaurant details, specifically the average delivery time
+  Future<void> _fetchRestaurantDetails(String restaurantId) async {
+    try {
+      final restaurantSnapshot = await FirebaseFirestore.instance
+          .collection('restaurants')
+          .doc(restaurantId)
+          .get();
+
+      if (restaurantSnapshot.exists) {
+        setState(() {
+          _deliveryTime = restaurantSnapshot.data()?['time'] ?? 'N/A';
+        });
+      } else {
+        setState(() {
+          _deliveryTime = 'N/A'; // If no time is available
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _deliveryTime = 'N/A'; // In case of any error
+      });
+    }
+  }
+
+  // Show dialog to input customization for cart items
+  void _showCustomizationDialog(String itemId, String currentCustomization) {
+    final TextEditingController customizationController =
+        TextEditingController(text: currentCustomization);
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Add Customization'),
+          content: TextField(
+            controller: customizationController,
+            decoration: const InputDecoration(labelText: 'Customization'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                _addCustomization(itemId, customizationController.text);
+                Navigator.of(context).pop();
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Add or update customization for cart items
+  Future<void> _addCustomization(String itemId, String customization) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final cartRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('cart')
+          .doc(itemId);
+
+      await cartRef.update({
+        'customization': customization, // Save customization to cart
+      });
+
+      _fetchCartItems(); // Refetch cart items after adding customization
     }
   }
 
@@ -114,15 +278,19 @@ class _CartPageState extends State<CartPage> {
       final cartItems = cartSnapshot.docs.map((doc) {
         final data = doc.data();
         return {
-          'itemId': doc.id,
+          'dishName': data['name'], // Storing dish name
+          'price': (data['totalPrice'] as num).toDouble(),
           'quantity': data['quantity'],
           'totalPrice': (data['totalPrice'] as num).toDouble(),
           'customization': data['customization'] ?? '',
+          'hotelName': data['hotelName'] ?? 'Unknown Hotel', // Ensure hotel name is provided
+          'isVeg': data['isVeg'] ?? true, // Assuming a field is present for veg/non-veg
         };
       }).toList();
 
       // Save the order history
       await orderRef.set({
+        'userId': user.uid,
         'orderDate': Timestamp.now(),
         'totalPrice': _totalPrice,
         'items': cartItems,
@@ -169,19 +337,28 @@ class _CartPageState extends State<CartPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("My Cart"),
+        title: const Text("My Cart"), // Ensure "MY CART" is only in the app bar
       ),
       body: Column(
         children: [
-          // User details section
-          ListTile(
-            title: const Text('Customer Details'),
-            subtitle: Column(
+          // Top section with Address and Edit option
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Username: $userName'),
-                Text('Phone: $userPhone'),
-                Text('Address: $userAddress'),
+                const Text('DEFAULT ADDRESS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                Text(userName, style: const TextStyle(fontSize: 14)),
+                Text(userAddress, style: const TextStyle(fontSize: 14)),
+                Row(
+                  children: [
+                    Text(userPhone, style: const TextStyle(fontSize: 14)),
+                    IconButton(
+                      icon: const Icon(Icons.edit, size: 18),
+                      onPressed: _showEditDialog,
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -189,42 +366,90 @@ class _CartPageState extends State<CartPage> {
 
           // Cart items section
           Expanded(
-            child: ListView.builder(
-              itemCount: _cartItems.length,
-              itemBuilder: (context, index) {
-                final item = _cartItems[index];
-                return ListTile(
-                  leading: item['image'].isNotEmpty
-                      ? Image.network(
-                          item['image'], 
-                          width: 80,
-                          height: 80,
-                          fit: BoxFit.cover,
-                        )
-                      : const Icon(Icons.image, size: 80),
-                  title: Text(item['name']),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('₹${item['price']} x ${item['quantity']}'),
-                    ],
+            child: _cartItems.isNotEmpty
+                ? ListView.builder(
+                    itemCount: _cartItems.length,
+                    itemBuilder: (context, index) {
+                      final item = _cartItems[index];
+                      return ListTile(
+                        leading: item['image'].isNotEmpty
+                            ? Image.network(
+                                item['image'], // Display item image
+                                width: 60, // Adjusted to avoid overflow
+                                height: 60,
+                                fit: BoxFit.cover,
+                              )
+                            : const Icon(Icons.image, size: 60), // Fallback if no image
+                        title: Text(item['name'], style: const TextStyle(fontSize: 14)),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('₹${item['price']} x ${item['quantity']}', style: const TextStyle(fontSize: 14)),
+                            Row(
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.remove, size: 18),
+                                  onPressed: () {
+                                    _updateQuantity(item['id'], item['quantity'] - 1, item['price']);
+                                  },
+                                ),
+                                Text(item['quantity'].toString(), style: const TextStyle(fontSize: 14)),
+                                IconButton(
+                                  icon: const Icon(Icons.add, size: 18),
+                                  onPressed: () {
+                                    _updateQuantity(item['id'], item['quantity'] + 1, item['price']);
+                                  },
+                                ),
+                              ],
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                _showCustomizationDialog(item['id'], item['customization']);
+                              },
+                              child: const Text('Add Customization', style: TextStyle(fontSize: 12)),
+                            ),
+                            Text('Total: ₹${item['totalPrice']}', style: const TextStyle(fontSize: 14)),
+                          ],
+                        ),
+                      );
+                    },
+                  )
+                : const Center(
+                    child: Text("Nothing added to cart yet.", style: TextStyle(fontSize: 14)),
                   ),
-                  trailing: Text('Total: ₹${item['totalPrice']}'),
-                );
-              },
-            ),
           ),
 
-          // Total price and Place Order button
+          // Total price and Place Order button with delivery time
           Container(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
+            decoration: BoxDecoration(
+              border: Border(
+                top: BorderSide(color: Colors.grey.shade300),
+              ),
+            ),
             child: Column(
               children: [
-                Text('Total: ₹$_totalPrice', style: const TextStyle(fontSize: 18)),
-                const SizedBox(height: 10),
-                ElevatedButton(
-                  onPressed: _placeOrder,
-                  child: const Text('Place Order'),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Total Amount', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        Text('₹$_totalPrice', style: const TextStyle(fontSize: 14)),
+                        Text('$_deliveryTime mins', style: const TextStyle(fontSize: 12)),
+                        const Text('expected delivery time', style: TextStyle(fontSize: 12)),
+                      ],
+                    ),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 12), // Adjusted to avoid overflow
+                        backgroundColor: Colors.green, // Green color for Place Order button
+                      ),
+                      onPressed: _cartItems.isNotEmpty ? _placeOrder : null,
+                      child: const Text('Place Order', style: TextStyle(fontSize: 14)),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -314,6 +539,11 @@ class TrianglePainter extends CustomPainter {
 class ThankYouScreen extends StatelessWidget {
   const ThankYouScreen({super.key});
 
+  // Navigate back to the home page
+  void _goToHomePage(BuildContext context) {
+    Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -333,6 +563,17 @@ class ThankYouScreen extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             const Text('Your order has been confirmed'),
+
+            const SizedBox(height: 30),
+            // Back button to go to the home page
+            ElevatedButton.icon(
+              onPressed: () => _goToHomePage(context), // Navigate to home page
+              icon: const Icon(Icons.arrow_back),
+              label: const Text('Back to Home'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.grey, // Back button color
+              ),
+            ),
           ],
         ),
       ),

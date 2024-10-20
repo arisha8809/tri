@@ -119,14 +119,19 @@ class HomePageState extends State<HomePage> {
                             },
                             child: Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 8.0), // Add space between items
-                              child: ClipPath(
-                                clipper: TriangleClipper(),
-                                child: Image.network(
-                                  item['image'],
-                                  width: 80,
-                                  height: 80,
-                                  fit: BoxFit.cover,
-                                ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start, // Align contents to start
+                                children: [
+                                  ClipPath(
+                                    clipper: TriangleClipper(),
+                                    child: Image.network(
+                                      item['image'],
+                                      width: 80,
+                                      height: 80,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           );

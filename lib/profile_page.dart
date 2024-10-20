@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart'; // Import Firestore
 import 'package:firebase_auth/firebase_auth.dart'; // Import FirebaseAuth for the current user
-import 'package:tri/order_history_page.dart'; // Ensure this path is correct
-import 'package:tri/about_us.dart'; // Ensure this path is correct
-import 'package:tri/favourites_page.dart'; // Ensure this path is correct
-import 'package:tri/home_page.dart'; // Ensure this path is correct
-import 'package:tri/help_page.dart'; // Ensure this path is correct
-import 'package:tri/logout_page.dart'; // Ensure this path is correct
+import 'package:tri/order_history_page.dart'; // Import OrderHistoryPage
+import 'package:tri/about_us.dart'; // Import About Us Page
+import 'package:tri/favourites_page.dart'; // Import Favourites Page
+import 'package:tri/home_page.dart'; // Import Home Page
+import 'package:tri/help_page.dart'; // Import Help Page
+import 'package:tri/logout_page.dart'; // Import Logout Page
 import 'user_service.dart' as user_service;  // Import user_service if needed for user-specific logic
 
 class ProfilePage extends StatefulWidget {
@@ -79,9 +79,10 @@ class ProfilePageState extends State<ProfilePage> {
                 ListTile(
                   title: const Text('Order History'),
                   onTap: () {
-                    Navigator.pushReplacement(
+                    // Navigate to the Order History Page using push, not pushReplacement
+                    Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => OrderHistoryPage()),
+                      MaterialPageRoute(builder: (context) => OrderHistoryPage()), // Correct navigation with push
                     );
                   },
                 ),
