@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:provider/provider.dart'; // For accessing CartModel
 import 'dart:math'; // For the triangle animation
+import 'models/cart_model.dart'; // Import CartModel
 
 class CartPage extends StatefulWidget {
   @override
@@ -14,7 +16,6 @@ class _CartPageState extends State<CartPage> {
   String userName = 'N/A';  // Default value for username
   String userAddress = 'N/A';
   String userPhone = 'N/A';
-  String _deliveryTime = 'N/A'; // To store the delivery time from the restaurant
 
   @override
   void initState() {
@@ -101,7 +102,7 @@ class _CartPageState extends State<CartPage> {
           .collection('users')
           .doc(user.uid)
           .update({
-        'username': newName, // Update username instead of name
+        'username': newName,
         'phone_number': newPhone,
         'address': newAddress,
       });
@@ -144,43 +145,12 @@ class _CartPageState extends State<CartPage> {
           'totalPrice': (data['totalPrice'] as num).toDouble(),
           'customization': data['customization'] ?? '', // Fetch customization if it exists
           'image': itemData['image'] ?? '',
-          'restaurant_id': itemData['restaurant_id'] ?? 'Unknown Restaurant',
         };
       }).toList());
 
       setState(() {
         _cartItems = cartItems;
         _totalPrice = totalPrice;
-        if (_cartItems.isNotEmpty) {
-          // Fetch restaurant details for delivery time using the restaurant_id of the first item
-          _fetchRestaurantDetails(_cartItems[0]['restaurant_id']);
-        } else {
-          _deliveryTime = 'N/A'; // Default when no items in the cart
-        }
-      });
-    }
-  }
-
-  // Fetch restaurant details, specifically the average delivery time
-  Future<void> _fetchRestaurantDetails(String restaurantId) async {
-    try {
-      final restaurantSnapshot = await FirebaseFirestore.instance
-          .collection('restaurants')
-          .doc(restaurantId)
-          .get();
-
-      if (restaurantSnapshot.exists) {
-        setState(() {
-          _deliveryTime = restaurantSnapshot.data()?['time'] ?? 'N/A';
-        });
-      } else {
-        setState(() {
-          _deliveryTime = 'N/A'; // If no time is available
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _deliveryTime = 'N/A'; // In case of any error
       });
     }
   }
@@ -283,8 +253,6 @@ class _CartPageState extends State<CartPage> {
           'quantity': data['quantity'],
           'totalPrice': (data['totalPrice'] as num).toDouble(),
           'customization': data['customization'] ?? '',
-          'hotelName': data['hotelName'] ?? 'Unknown Hotel', // Ensure hotel name is provided
-          'isVeg': data['isVeg'] ?? true, // Assuming a field is present for veg/non-veg
         };
       }).toList();
 
@@ -337,7 +305,7 @@ class _CartPageState extends State<CartPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("My Cart"), // Ensure "MY CART" is only in the app bar
+        title: const Text("My Cart"),
       ),
       body: Column(
         children: [
@@ -375,7 +343,7 @@ class _CartPageState extends State<CartPage> {
                         leading: item['image'].isNotEmpty
                             ? Image.network(
                                 item['image'], // Display item image
-                                width: 60, // Adjusted to avoid overflow
+                                width: 60,
                                 height: 60,
                                 fit: BoxFit.cover,
                               )
@@ -419,7 +387,7 @@ class _CartPageState extends State<CartPage> {
                   ),
           ),
 
-          // Total price and Place Order button with delivery time
+          // Total price and Place Order button
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
             decoration: BoxDecoration(
@@ -437,14 +405,12 @@ class _CartPageState extends State<CartPage> {
                       children: [
                         const Text('Total Amount', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                         Text('₹$_totalPrice', style: const TextStyle(fontSize: 14)),
-                        Text('$_deliveryTime mins', style: const TextStyle(fontSize: 12)),
-                        const Text('expected delivery time', style: TextStyle(fontSize: 12)),
                       ],
                     ),
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 12), // Adjusted to avoid overflow
-                        backgroundColor: Colors.green, // Green color for Place Order button
+                        padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 12),
+                        backgroundColor: Colors.green,
                       ),
                       onPressed: _cartItems.isNotEmpty ? _placeOrder : null,
                       child: const Text('Place Order', style: TextStyle(fontSize: 14)),
@@ -478,7 +444,7 @@ class _SpinningTriangleDialogState extends State<SpinningTriangleDialog>
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
-    )..repeat(); // Start rotating the triangle
+    )..repeat();
   }
 
   @override
@@ -512,7 +478,6 @@ class _SpinningTriangleDialogState extends State<SpinningTriangleDialog>
   }
 }
 
-// Custom painter for the triangle
 class TrianglePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
@@ -535,11 +500,9 @@ class TrianglePainter extends CustomPainter {
   }
 }
 
-// Thank you screen after order confirmation
 class ThankYouScreen extends StatelessWidget {
   const ThankYouScreen({super.key});
 
-  // Navigate back to the home page
   void _goToHomePage(BuildContext context) {
     Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
   }
@@ -565,13 +528,12 @@ class ThankYouScreen extends StatelessWidget {
             const Text('Your order has been confirmed'),
 
             const SizedBox(height: 30),
-            // Back button to go to the home page
             ElevatedButton.icon(
-              onPressed: () => _goToHomePage(context), // Navigate to home page
+              onPressed: () => _goToHomePage(context),
               icon: const Icon(Icons.arrow_back),
               label: const Text('Back to Home'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.grey, // Back button color
+                backgroundColor: Colors.grey,
               ),
             ),
           ],

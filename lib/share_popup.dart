@@ -1,7 +1,16 @@
 import 'package:flutter/material.dart';
 
 class SharePopup extends StatelessWidget {
-  const SharePopup({super.key});
+  final String name;
+  final String hotelName;
+  final String imagePath;
+
+  const SharePopup({
+    super.key,
+    required this.name,
+    required this.hotelName,
+    required this.imagePath,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -43,22 +52,33 @@ class SharePopup extends StatelessWidget {
               padding: EdgeInsets.all(16),
               child: Column(
                 children: [
-                  // Placeholder for product image
+                  // Display product image
                   ClipRRect(
                     borderRadius: BorderRadius.circular(8.0),
-                    child: Image.asset(
-                      'assets/chocolate_cake.png', // Correct image path for the cake
+                    child: Image.network(
+                      imagePath, // Use the passed image path
                       height: 150,
                       fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return const Icon(Icons.error, color: Colors.red, size: 80);
+                      },
                     ),
                   ),
                   SizedBox(height: 10), // Space between image and text
                   Text(
-                    'CHOCOLATE CAKE EKAANT',
+                    name.toUpperCase(),
                     style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  Text(
+                    hotelName,
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 14,
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -72,39 +92,30 @@ class SharePopup extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                // Snapchat button
                 IconButton(
                   icon: Image.asset('assets/snapchat.png', height: 40, width: 40),
                   onPressed: () {
                     // Handle Snapchat share functionality
                   },
                 ),
-                
-                // Pinterest button
                 IconButton(
                   icon: Image.asset('assets/pinterest.png', height: 40, width: 40),
                   onPressed: () {
                     // Handle Pinterest share functionality
                   },
                 ),
-                
-                // Facebook button
                 IconButton(
                   icon: Image.asset('assets/facebook.png', height: 40, width: 40),
                   onPressed: () {
                     // Handle Facebook share functionality
                   },
                 ),
-                
-                // WhatsApp button
                 IconButton(
                   icon: Image.asset('assets/whatsapp.png', height: 40, width: 40),
                   onPressed: () {
                     // Handle WhatsApp share functionality
                   },
                 ),
-                
-                // Telegram button
                 IconButton(
                   icon: Image.asset('assets/telegram.png', height: 40, width: 40),
                   onPressed: () {

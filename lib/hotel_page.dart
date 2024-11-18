@@ -5,6 +5,8 @@ import 'package:tri/profile_page.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/animation.dart';
+import 'package:provider/provider.dart'; // Import Provider
+import 'models/cart_model.dart'; // Import CartModel
 
 class HotelPage extends StatefulWidget {
   final String restaurant_id;
@@ -47,15 +49,19 @@ class HotelPageState extends State<HotelPage> with SingleTickerProviderStateMixi
 
   Future<void> _fetchRestaurantDetails() async {
     try {
+      print("id${widget.restaurant_id}");
       DocumentSnapshot restaurantSnapshot = await FirebaseFirestore.instance
-          .collection('restaurants')
+          .collection('restaurant')
           .doc(widget.restaurant_id)
           .get();
+
+      restaurantName = restaurantSnapshot['name'];
+      restaurantImage = restaurantSnapshot['image'];
 
       if (restaurantSnapshot.exists) {
         setState(() {
           restaurantName = restaurantSnapshot['name'];
-          restaurantImage = restaurantSnapshot['image']; // Fetch image correctly
+          restaurantImage = restaurantSnapshot['image'];
           isLoading = false;
         });
       } else {
@@ -82,7 +88,12 @@ class HotelPageState extends State<HotelPage> with SingleTickerProviderStateMixi
 
       for (var item in itemSnapshot.docs) {
         final itemData = item.data() as Map<String, dynamic>;
-        final category = itemData['category'].toString().replaceAll('_', ' ').split(' ').map((word) => word[0].toUpperCase() + word.substring(1)).join(' '); // Capitalize category
+        final category = itemData['category']
+            .toString()
+            .replaceAll('_', ' ')
+            .split(' ')
+            .map((word) => word[0].toUpperCase() + word.substring(1))
+            .join(' ');
 
         if (!tempCategorizedItems.containsKey(category)) {
           tempCategorizedItems[category] = [];
@@ -135,7 +146,7 @@ class HotelPageState extends State<HotelPage> with SingleTickerProviderStateMixi
         'price': price,
         'quantity': 1,
         'totalPrice': price,
-        'customization': '', // Initialize customization as empty string
+        'customization': '',
       });
     }
 
@@ -219,7 +230,7 @@ class HotelPageState extends State<HotelPage> with SingleTickerProviderStateMixi
           'totalPrice': FieldValue.increment(-price),
         });
       } else {
-        cartRef.delete(); // Remove item from cart if quantity reaches 0
+        cartRef.delete();
       }
     }
   }
@@ -236,7 +247,6 @@ class HotelPageState extends State<HotelPage> with SingleTickerProviderStateMixi
         );
         break;
       case 1:
-        // Stay on the hotel page
         break;
       case 2:
         Navigator.pushReplacement(
@@ -249,6 +259,8 @@ class HotelPageState extends State<HotelPage> with SingleTickerProviderStateMixi
 
   @override
   Widget build(BuildContext context) {
+    final cartItemCount = Provider.of<CartModel>(context).itemCount; // Access cart item count
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.white,
@@ -268,33 +280,50 @@ class HotelPageState extends State<HotelPage> with SingleTickerProviderStateMixi
                 prefixIcon: Icon(Icons.search),
               ),
               style: const TextStyle(fontSize: 16),
-              textAlign: TextAlign.center, // Center the text in the search bar
+              textAlign: TextAlign.center,
             ),
           ),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.shopping_cart),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => CartPage()), // Navigate to Cart Page
-              );
-            },
+          Stack(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.shopping_cart),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => CartPage()),
+                  );
+                },
+              ),
+              if (cartItemCount > 0)
+                Positioned(
+                  right: 8,
+                  top: 8,
+                  child: CircleAvatar(
+                    radius: 10,
+                    backgroundColor: Colors.red,
+                    child: Text(
+                      '$cartItemCount',
+                      style: const TextStyle(fontSize: 12, color: Colors.white),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ],
       ),
       body: isLoading
-          ? const Center(child: CircularProgressIndicator()) // Show loading indicator while fetching restaurant data
+          ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
                 Padding(
-                  padding: const EdgeInsets.all(16.0), // Add some padding for better spacing
+                  padding: const EdgeInsets.all(16.0),
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(15), // Rounded corners for restaurant image
+                    borderRadius: BorderRadius.circular(15),
                     child: restaurantImage != null
                         ? Image.network(restaurantImage!, height: 200, fit: BoxFit.cover)
-                        : const Icon(Icons.image, size: 200), // Show default icon if image is missing
+                        : const Icon(Icons.image, size: 200),
                   ),
                 ),
                 Expanded(
@@ -310,7 +339,7 @@ class HotelPageState extends State<HotelPage> with SingleTickerProviderStateMixi
                           Padding(
                             padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
                             child: Text(
-                              category, // Display category title
+                              category,
                               style: const TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
